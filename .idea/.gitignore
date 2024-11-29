@@ -1,3 +1,9 @@
 # Default ignored files
 /shelf/
 /workspace.xml
+
+# Ignore .env file (for environment variables)
+.env
+
+# Ignore CSV file
+Login_Automation_Sheet1.csv
