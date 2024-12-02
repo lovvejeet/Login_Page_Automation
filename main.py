@@ -114,41 +114,77 @@ def run_academic_tests(driver):
         academic_subject_chapter.click()
         print("Clicked on Academic Subject Chapter")
 
-        # Wait for iframe and switch context
+        # Wait for iframe and switch context [video player]
         iframe = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "iframe[name^='vdoFrame']"))
         )
         driver.switch_to.frame(iframe)
         print("Switched to video iframe.")
 
-        # Wait until the video is playing
-        max_wait_time = 30  # Maximum time to wait for the video to start playing
-        wait_interval = 2   # Interval between checks
-        is_playing = False
-        elapsed_time = 0
+        # Wait for the video element to be ready
+        video_element = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.TAG_NAME, "video"))
+        )
+        print("Video player located.")
 
-        while elapsed_time < max_wait_time:
-            is_playing = driver.execute_script(
+        # Wait until the video duration is available and valid
+        for _ in range(10):  # Retry up to 10 times
+            video_duration = driver.execute_script(
                 """
                 let video = document.querySelector('video');
-                return video && !video.paused && !video.ended && video.readyState > 2;
+                if (video && video.duration > 0) {
+                    return video.duration;
+                }
+                return null;
                 """
             )
-            if is_playing:
-                print("Video is playing.")
+            if video_duration:
                 break
-            time.sleep(wait_interval)
-            elapsed_time += wait_interval
-            print("Waiting for video to start playing...")
+            print("Waiting for valid video duration...")
+            time.sleep(1)
 
-        if not is_playing:
-            print("Video did not start playing within the allotted time.")
+        if video_duration and isinstance(video_duration, (int, float)):
+            print(f"Video duration: {video_duration:.2f} seconds")
+        else:
+            print("Failed to retrieve valid video duration.")
+            return False
+
+        # Play the video
+        driver.execute_script("document.querySelector('video').play();")
+        print("Started playing the video.")
+
+        # Wait for a few seconds to ensure playback
+        time.sleep(5)
+
+        # Forward the video by 10 seconds
+        driver.execute_script(
+            """
+            let video = document.querySelector('video');
+            if (video) {
+                video.currentTime = Math.min(video.currentTime + 10, video.duration);
+            }
+            """
+        )
+        print("Forwarded the video by 10 seconds.")
+
+        # Wait to observe changes
+        time.sleep(5)
+
+        # Verify if the video is still playing
+        is_playing = driver.execute_script(
+            """
+            let video = document.querySelector('video');
+            return video && !video.paused && !video.ended && video.readyState > 2;
+            """
+        )
+        if is_playing:
+            print("Video is confirmed to be playing.")
+        else:
+            print("Video is not playing.")
 
         # Switch back to the main content
         driver.switch_to.default_content()
         print("Switched back to main content.")
-
-        return is_playing
 
         # Click the academic subject chapter pdf
         academic_pdf_chapter = WebDriverWait(driver, 10).until(
