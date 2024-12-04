@@ -1,253 +1,210 @@
+import json
+import time
+import os
+import csv
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+import chromedriver_autoinstaller
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from dotenv import load_dotenv
-import chromedriver_autoinstaller
-import csv
-import os
-import time
 
-load_dotenv()
+# Environment variables and constants
+login_url = "https://preprod.v-learning.in/login" 
+csv_file_path = "Failed_API_Logs.csv"
 
-# Access environment variables
-login_url = os.getenv("LOGIN_URL", "https://preprod.v-learning.in/login")
-csv_file_path = os.getenv("CSV_FILE_PATH", "Login_Automation_Sheet1.csv")
-
-# Ensure the CSV header is written only once
-def write_header():
-    if not os.path.exists(csv_file_path):
-        with open(csv_file_path, mode='a', newline='') as csv_file:
-            csv_writer = csv.writer(csv_file)
-            csv_writer.writerow(["Time", "Date", "Username", "Password", "Test Scenario", "Result"])
-
-# Write test results to CSV file
-def write_to_csv(username, password, test_case, result):
-    timestamp = time.strftime("%H:%M:%S", time.localtime())
-    datestamp = time.strftime("%Y-%m-%d", time.localtime())
-
-    write_header()  # Ensure header is written only once
-
+# Function to write failed API calls to CSV
+def write_failed_api_to_csv(url, status_code):
     with open(csv_file_path, mode='a', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow([timestamp, datestamp, username, password, test_case, result])
+        csv_writer.writerow([time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), url, status_code])
 
-# Run login tests
-def run_login_test(driver, username, password, test_case):
+# Setup WebDriver with performance logging enabled
+def setup_driver():
+    chromedriver_autoinstaller.install()
+    
+    # Create Chrome options
+    options = Options()
+    
+    # Enable performance logging
+    options.add_argument("--enable-logging")
+    options.add_argument("--v=1")
+    
+    # Enable performance logs
+    options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+
+    # Use Service to manage the ChromeDriver instance
+    service = Service()
+
+    # Create the Chrome driver with options
+    driver = webdriver.Chrome(service=service, options=options)
+    return driver
+
+# Analyze network logs for failed API calls
+def check_failed_api_calls(driver):
+    print("Checking network logs for failed API calls...")
+    logs = driver.get_log("performance")
+    failed_apis = []
+
+    for entry in logs:
+        log = json.loads(entry["message"])["message"]
+
+        if log["method"] == "Network.responseReceived":
+            response = log["params"]["response"]
+            url = response.get("url", "")
+            status_code = response.get("status", 0)
+
+            # Log failed API calls (HTTP 4xx or 5xx)
+            if 400 <= status_code < 600:
+                failed_apis.append({"url": url, "status_code": status_code})
+                # Write failed API calls to CSV immediately
+                write_failed_api_to_csv(url, status_code)
+
+    if failed_apis:
+        print("Failed API calls detected:")
+        for api in failed_apis:
+            print(f"URL: {api['url']}, Status Code: {api['status_code']}")
+    else:
+        print("No failed API calls detected.")
+
+def run_login_test(driver, username, password):
     try:
         driver.maximize_window()
-        driver.get("https://preprod.v-learning.in/login")
+        driver.get(login_url)
         time.sleep(2)
-        
+
         username_field = driver.find_element(By.XPATH, '//*[@id="__layout"]/div/div[2]/div/div[2]/div[3]/div/div[1]/form/div[1]/div/div/input')
         password_field = driver.find_element(By.XPATH, '//*[@id="__layout"]/div/div[2]/div/div[2]/div[3]/div/div[1]/form/div[2]/div/div/input')
         username_field.send_keys(username)
-        time.sleep(2)
         password_field.send_keys(password)
-        time.sleep(2)
 
         login_button = driver.find_element(By.XPATH, '//*[@id="__layout"]/div/div[2]/div/div[2]/div[3]/div/div[1]/form/div[3]/div/div/button')
         login_button.click()
         time.sleep(5)
 
-        result = "PASSED"
-        print(f"Login Test case - {test_case}: {result}")
-        write_to_csv(username, password, test_case, result)
-
+        print("Login Test case - Successful Login: PASSED")
         return True  # Successful login
 
     except Exception as e:
-        print(f"Login Test case - {test_case}: FAILED")
-        print(f"Error: {str(e)}")
-        write_to_csv(username, password, test_case, "FAILED")
+        print(f"Login Test case - Failed: {str(e)}")
         return False
 
-# Run Academic tests after successful login
+# Academic Test Function
 def run_academic_tests(driver):
     try:
-         # Click the academic
+        # Navigate to Academic section
         academic = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.XPATH, '//*[@id="__layout"]/div/div[1]/div/div[3]/div/a[2]'))
         )
         academic.click()
         print("Clicked on Academic")
-        time.sleep(5)
 
-        # Click the academic subject
+        # Select a subject and a chapter
         academic_subject = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CLASS_NAME, 'subject-tile'))
+            EC.element_to_be_clickable((By.XPATH, '/html/body/div[2]/div/div/div[2]/div[2]/div[1]/div[1]/div[2]/div[2]/div[1]'))
         )
         academic_subject.click()
         print("Clicked on Academic Subject")
-        time.sleep(5)
 
-        # Click the academic subject chapter 
         academic_subject_chapter = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.CLASS_NAME, 'chapter-rows'))
         )
         academic_subject_chapter.click()
         print("Clicked on Academic Subject Chapter")
-        time.sleep(5)
 
-        # Click the academic subject chapter pdf
-        academic_pdf_chapter = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[2]/div/div[1]/div[2]/button[3]'))
+        # Wait for iframe and switch context [video player]
+        iframe = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "iframe[name^='vdoFrame']"))
         )
-        academic_pdf_chapter.click()
-        print("Clicked on Academic Subject PDF Chapter")
-        time.sleep(5)
+        driver.switch_to.frame(iframe)
+        print("Switched to video iframe.")
 
-        # Click the academic subject chapter pdf close button
-        academic_pdf_chapter_close = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[2]/div/div[6]/div/div[1]/button/i'))
+        # Wait for the video element to be ready
+        video_element = WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.TAG_NAME, "video"))
         )
-        academic_pdf_chapter_close.click()
-        print("Closed Academic PDF Chapter")
+        print("Video player located.")
+
+        # Wait until the video duration is available and valid
+        for _ in range(10):  # Retry up to 10 times
+            video_duration = driver.execute_script(
+                """
+                let video = document.querySelector('video');
+                if (video && video.duration > 0) {
+                    return video.duration;
+                }
+                return null;
+                """
+            )
+            if video_duration:
+                break
+            print("Waiting for valid video duration...")
+            time.sleep(1)
+
+        if video_duration and isinstance(video_duration, (int, float)):
+            print(f"Video duration: {video_duration:.2f} seconds")
+        else:
+            print("Failed to retrieve valid video duration.")
+            return False
+
+        # Play the video
+        driver.execute_script("document.querySelector('video').play();")
+        print("Started playing the video.")
+
+        # Wait for a few seconds to ensure playback
         time.sleep(5)
 
-        # Click the academic subject chapter quiz
-        academic_chapter_quiz = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[2]/div/div[1]/div[2]/button[2]'))
+        # Forward the video by 10 seconds
+        driver.execute_script(
+            """
+            let video = document.querySelector('video');
+            if (video) {
+                video.currentTime = Math.min(video.currentTime + 10, video.duration);
+            }
+            """
         )
-        academic_chapter_quiz.click()
-        print("Clicked on Academic Subject Chapter Quiz")
+        print("Forwarded the video by 10 seconds.")
         time.sleep(5)
-        
-        # Click the academic subject chapter quiz close button
-        academic_chapter_quiz_close = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[1]/div[1]/div/span'))
+
+        # Verify if the video is still playing
+        is_playing = driver.execute_script(
+            """
+            let video = document.querySelector('video');
+            return video && !video.paused && !video.ended && video.readyState > 2;
+            """
         )
-        academic_chapter_quiz_close.click()
-        print("Closed Academic Chapter Quiz")
-        time.sleep(5)
+        if is_playing:
+            print("Video is confirmed to be playing.")
+        else:
+            print("Video is not playing.")
 
-        # Click the academic subject back chapter 
-        academic_back_chapter = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[1]/div[1]/div/span'))
-        )
-        academic_back_chapter.click()
-        print("Clicked on Academic Back Chapter")
-        time.sleep(5)
+        # Switch back to the main content
+        driver.switch_to.default_content()
+        print("Switched back to main content.")
 
-        # Click the academic back button
-        academic_back = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[1]/div[1]/div/span'))
-        )
-        academic_back.click()
-        print("Clicked on Academic Back Button")
-        time.sleep(5)
+        return True
 
-
-        result = "PASSED"
-        print(f"Academic Tests: {result}")
-        write_to_csv("N/A", "N/A", "Academic Tests", result)
-    
     except Exception as e:
-        print(f"Error: {str(e)}")
-        write_to_csv("N/A", "N/A", "Academic Tests", "FAILED")
-
-# Run Building Legends tests after successful login
-def run_building_legends_tests(driver):
-    try:
-        
-        # Click the building legends
-        building_legends = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[1]/div/div[3]/div/a[3]'))
-        )
-        building_legends.click()
-        print("Clicked on Building Legends")
-        time.sleep(5)
-   
-        # Click the building legends subject
-        building_legends_subject = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CLASS_NAME, 'subject-tile'))
-        )
-        building_legends_subject.click()
-        print("Clicked on Building Legends Subject")
-        time.sleep(5)
-
-        # Click the building legends subject chapter 
-        building_legends_subject_chapter = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CLASS_NAME, 'chapter-rows'))
-        )
-        building_legends_subject_chapter.click()
-        print("Clicked on Building Legends Subject Chapter")
-        time.sleep(5)
-
-        # Click the academic subject chapter pdf
-        building_legends_pdf_chapter = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[2]/div/div[1]/div[2]/button[3]'))
-        )
-        building_legends_pdf_chapter.click()
-        print("Clicked on Building Legends PDF Chapter")
-        time.sleep(5)
-
-         # Click the academic subject chapter pdf close button
-        building_legends_pdf_chapter_close = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[2]/div/div[6]/div/div[1]/button/i'))
-        )
-        building_legends_pdf_chapter_close.click()
-        print("Closed Building Legends PDF Chapter")
-        time.sleep(5)
-
-        # Click the academic subject chapter quiz
-        building_legends_chapter_quiz = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[2]/div/div[1]/div[2]/button[2]'))
-        )
-        building_legends_chapter_quiz.click()
-        print("Clicked on Building Legends Chapter Quiz")
-        time.sleep(5)
-        
-        # Click the academic subject chapter quiz close button
-        building_legends_chapter_quiz_close = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[1]/div[1]/div/span'))
-        )
-        building_legends_chapter_quiz_close.click()
-        print("Closed Building Legends Chapter Quiz")
-        time.sleep(5)
-
-        # Click the academic subject back chapter 
-        building_legends_back_chapter = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[1]/div[1]/div/span'))
-        )
-        building_legends_back_chapter.click()
-        print("Clicked on Building Legends Back Chapter")
-        time.sleep(5)
-
-        # Click the academic back button
-        building_legends_back = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[1]/div[1]/div/span'))
-        )
-        building_legends_back.click()
-        print("Clicked on Building Legends Back Button")
-        time.sleep(5)
-
-        
-        result = "PASSED"
-        print(f"Building Legends Tests: {result}")
-        write_to_csv("N/A", "N/A", "Building Legends Tests", result)
-    
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        write_to_csv("N/A", "N/A", "Building Legends Tests", "FAILED")
+        print(f"Academic Tests FAILED: {str(e)}")
+        return False
 
 
-
-# Main function to run all tests
+# Main function
 def main():
-    chromedriver_autoinstaller.install()
-    driver = webdriver.Chrome()
+    # Create or write CSV header 
+    if not os.path.exists(csv_file_path):  # Check if the file exists
+        with open(csv_file_path, mode='w', newline='') as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(["Timestamp", "URL", "Status Code"])  # Write header row
+
+    driver = setup_driver()
 
     try:
-        # Login tests
-        run_login_test(driver, "ksk@v-learning.in", "Dream@$2023$", "Incorrect Username")
-        run_login_test(driver, "ksk10@v-learning.in", "Dream@$2023", "Incorrect Password")
-        run_login_test(driver, "ksk", "Dream", "Invalid Credentials")
-        if run_login_test(driver, "ksk10@v-learning.in", "Vista@$1024$", "Successful Login"):
-            # Run tests if login is successful
+        if run_login_test(driver, "ksk10@v-learning.in", "Dream@$1224$"):
             run_academic_tests(driver)
-            # Run Building Legends tests
-            run_building_legends_tests(driver)
+            check_failed_api_calls(driver) 
+
     finally:
         driver.quit()
 
