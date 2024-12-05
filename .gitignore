@@ -5,6 +5,8 @@
 /shelf/
 /workspace.xml
 
+__pycache__
+
 
 
 # Ignore CSV file
