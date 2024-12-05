@@ -5,6 +5,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from quiz import run_quiz_tests
+from pdf import run_pdf_tests
 
 def log_with_timestamp(message):
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
@@ -131,24 +132,15 @@ def run_academic_tests(driver):
         # Switch back to the main content
         driver.switch_to.default_content()
         print("Switched back to main content.")
-
-        # Click the academic subject chapter pdf
-        academic_pdf_chapter = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[2]/div/div[1]/div[2]/button[3]'))
-        )
-        academic_pdf_chapter.click()
-        print("Clicked on Academic Subject PDF Chapter")
         time.sleep(5)
+        
+        run_pdf_tests(driver)
 
-        # Click the academic subject chapter pdf close button
-        academic_pdf_chapter_close = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '/html/body/div[3]/div/div/div[2]/div[2]/div/div[6]/div/div[1]/button/i'))
-        )
-        academic_pdf_chapter_close.click()
-        print("Closed Academic PDF Chapter")
         time.sleep(5)
 
         run_quiz_tests(driver)
+
+        time.sleep(5)
 
         # Click the academic subject back chapter 
         academic_back_chapter = WebDriverWait(driver, 10).until(
